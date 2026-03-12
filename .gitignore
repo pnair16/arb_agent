@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Runtime artifacts
+arb_opportunities.db
+arb_scanner.log
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Environment / secrets
+.env
