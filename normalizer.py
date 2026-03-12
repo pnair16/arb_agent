@@ -25,7 +25,6 @@ value based on observed false-positive/negative rates during research.
 """
 
 import logging
-import re
 import string
 from dataclasses import dataclass, field
 from typing import Any
@@ -203,20 +202,29 @@ def _polymarket_probs(market: dict[str, Any]) -> tuple[float | None, float | Non
     """
     Extract (yes_prob, no_prob) from a Polymarket Gamma market dict.
 
-    outcomePrices is a list aligned with outcomes:
-      outcomes      = ["Yes", "No"]
-      outcomePrices = ["0.65", "0.35"]
-    """
-    outcomes: list[str] = market.get("outcomes", [])
-    prices_raw = market.get("outcomePrices", [])
+    The Gamma API returns both `outcomes` and `outcomePrices` as either a
+    Python list OR a JSON-encoded string depending on the API version:
 
-    # outcomePrices may arrive as a JSON-encoded string in some API versions
-    if isinstance(prices_raw, str):
-        import json
-        try:
-            prices_raw = json.loads(prices_raw)
-        except Exception:
-            return None, None
+      outcomes      = '["Yes", "No"]'   OR   ["Yes", "No"]
+      outcomePrices = '["0.65", "0.35"]' OR  ["0.65", "0.35"]
+
+    Both fields must be normalised to lists before use.
+    """
+    import json
+
+    def _to_list(value: Any) -> list:
+        if isinstance(value, list):
+            return value
+        if isinstance(value, str):
+            try:
+                parsed = json.loads(value)
+                return parsed if isinstance(parsed, list) else []
+            except Exception:
+                return []
+        return []
+
+    outcomes: list[str] = _to_list(market.get("outcomes", []))
+    prices_raw: list = _to_list(market.get("outcomePrices", []))
 
     if len(outcomes) != 2 or len(prices_raw) != 2:
         return None, None
@@ -277,7 +285,13 @@ def match_and_normalize(
     claimed_poly_indices: set[int] = set()
 
     for kalshi_market in kalshi_markets:
-        k_title_raw = kalshi_market.get("title", "") or kalshi_market.get("subtitle", "")
+        # Kalshi markets sometimes have the event description in subtitle when
+        # title is just the series name (e.g. title="NFL" subtitle="Chiefs to win").
+        # Combine both so the fuzzy matcher has the most descriptive text.
+        k_title_raw = " ".join(filter(None, [
+            kalshi_market.get("title", ""),
+            kalshi_market.get("subtitle", ""),
+        ])).strip()
         k_title_norm = _normalize_text(k_title_raw)
 
         if not k_title_norm:

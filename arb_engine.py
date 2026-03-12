@@ -171,16 +171,34 @@ def _insert_opportunity(conn: sqlite3.Connection, opp: ArbOpportunity) -> None:
 
 def _calc_arb_margin(prob_a: float, prob_b: float) -> float:
     """
-    Calculate the arbitrage margin for backing prob_a on platform A and
-    prob_b on platform B (opposing sides).
+    Calculate the arbitrage margin for simultaneously buying opposing sides
+    of the same event on two prediction-market platforms.
 
-    margin = (1 - 1/prob_a - 1/prob_b) * 100
+    Prediction-market mechanics
+    ---------------------------
+    A contract priced at P pays $1 if the outcome is correct and $0 otherwise.
+    To guarantee $1 regardless of outcome you buy:
+      - YES on platform A at price prob_a  (cost: prob_a)
+      - NO  on platform B at price prob_b  (cost: prob_b)
 
-    A positive margin means guaranteed profit; negative means a loss.
+    Total outlay = prob_a + prob_b
+    Guaranteed payout = $1
+
+    Profit per dollar = 1 - prob_a - prob_b
+    Margin %          = (1 - prob_a - prob_b) × 100
+
+    Arb exists when prob_a + prob_b < 1  →  margin > 0 %
+
+    Common confusion: the task description formula "(1/P_K) + (1/P_P) < 1"
+    uses P_K / P_P as DECIMAL ODDS (= 1/probability), not as probabilities.
+    Substituting decimal_odds = 1/prob gives the SAME condition:
+        1/O_K + 1/O_P < 1  ↔  prob_K + prob_P < 1
+    Since we already store implied probabilities (not decimal odds) we use
+    the direct form above.
     """
     if prob_a <= 0.0 or prob_b <= 0.0:
         return float("-inf")
-    return round((1.0 - (1.0 / prob_a) - (1.0 / prob_b)) * 100.0, 4)
+    return round((1.0 - prob_a - prob_b) * 100.0, 4)
 
 
 def evaluate_and_log(
